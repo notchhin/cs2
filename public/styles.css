@@ -1,0 +1,1241 @@
+/* ── Manga panel: CS2 HVH ─────────────────────────────
+   Cream paper, thick ink borders, offset shadows, halftone
+   screentones, katakana labels, one bolt of electric blue.
+   ──────────────────────────────────────────────────── */
+
+:root {
+  --paper: #f6f1e4;
+  --paper-2: #ede6d3;
+  --paper-3: #e2d9c1;
+
+  --ink: #08080a;
+  --ink-dim: #454548;
+  --ink-mute: #7a7a7d;
+
+  --bolt: #00a5ff;
+  --bolt-strong: #0080d4;
+  --bolt-paper: #c9ecff;
+
+  --blood: #d93441;
+  --warning: #e3a02a;
+  --live: #d93441;
+
+  --shadow: 4px 4px 0 0 var(--ink);
+  --shadow-lift: 5px 5px 0 0 var(--ink);
+  --shadow-sm: 3px 3px 0 0 var(--ink);
+  --shadow-tight: 2px 2px 0 0 var(--ink);
+
+  --border: 2px solid var(--ink);
+  --border-thin: 1px solid var(--ink);
+
+  --gutter: 14px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Special Elite', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+body {
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(8, 8, 10, 0.08) 1px, transparent 1.5px);
+  background-size: 6px 6px;
+  background-position: 0 0;
+}
+
+/* halftone pattern used inside panels */
+.halftone {
+  background-image: radial-gradient(circle at 1px 1px, var(--ink) 1.2px, transparent 1.4px);
+  background-size: 5px 5px;
+  background-position: 0 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 8px 12px;
+  font-family: 'Bungee', sans-serif;
+  font-size: 13px;
+  z-index: 100;
+}
+.skip-link:focus { left: 12px; top: 12px; }
+
+.broadcast-shell {
+  padding: 10px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+/* ── Chapter head (top bar) ────────────────────────── */
+
+.broadcast-nav {
+  position: relative;
+  height: auto;
+  background: var(--ink);
+  color: var(--paper);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 14px;
+  margin-bottom: 14px;
+  z-index: 5;
+}
+
+.broadcast-brand {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: var(--paper);
+  text-decoration: none;
+  font-family: 'Anton', sans-serif;
+  line-height: 0.85;
+  gap: 2px;
+}
+.broadcast-brand::before {
+  content: 'シービーツー・エイチブイエイチ';
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--bolt);
+  margin-bottom: 2px;
+}
+.broadcast-brand {
+  font-size: 22px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.broadcast-brand span {
+  color: var(--bolt);
+  position: relative;
+  display: inline-block;
+}
+.broadcast-brand span::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  bottom: -3px;
+  height: 2px;
+  background: var(--bolt);
+}
+
+.nav-links {
+  display: inline-flex;
+  gap: 3px;
+  justify-self: center;
+  font-family: 'Bungee', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.nav-links a {
+  color: var(--paper);
+  text-decoration: none;
+  padding: 5px 10px;
+  border: 2px solid transparent;
+  transition: border-color 100ms, color 100ms;
+  text-transform: uppercase;
+}
+.nav-links a:hover { border-color: var(--paper); }
+.nav-links a.active {
+  color: var(--bolt);
+  border-color: var(--bolt);
+}
+
+.nav-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'Bungee', sans-serif;
+  font-size: 11px;
+  color: var(--paper);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 9px;
+  border: 2px solid var(--paper);
+}
+.nav-status span {
+  width: 8px;
+  height: 8px;
+  background: var(--live);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--paper);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ── Splash panel (hero) ───────────────────────────── */
+
+.broadcast-main { display: grid; gap: 14px; }
+
+.broadcast-hero {
+  position: relative;
+  background: var(--paper-2);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 0;
+  display: grid;
+  grid-template-columns: 150px 1fr 200px;
+  align-items: stretch;
+  min-height: 170px;
+  overflow: hidden;
+}
+
+.broadcast-hero::before {
+  content: 'FIRST PANEL';
+  position: absolute;
+  top: -10px;
+  left: 16px;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 2px 8px;
+  font-family: 'Bungee', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  z-index: 2;
+}
+
+/* SG flag panel — solid ink block */
+.hero-flag {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 14px 16px;
+  border-right: var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  position: relative;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255, 245, 220, 0.14) 1.2px, transparent 1.4px);
+  background-size: 6px 6px;
+}
+.hero-flag span {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  color: var(--bolt);
+  letter-spacing: 0.06em;
+}
+.hero-flag span::before {
+  content: 'リージョン ';
+  color: var(--paper);
+  opacity: 0.6;
+}
+.hero-flag strong {
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: 80px;
+  line-height: 0.85;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: var(--paper);
+  align-self: flex-start;
+}
+.hero-flag::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 40px;
+  height: 26px;
+  background: var(--blood);
+  border: 2px solid var(--paper);
+}
+
+/* copy block */
+.broadcast-copy {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  position: relative;
+}
+.broadcast-copy::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 70px;
+  background-image: repeating-linear-gradient(
+    -60deg,
+    transparent 0 4px,
+    var(--ink) 4px 5px
+  );
+  opacity: 0.08;
+  pointer-events: none;
+}
+.broadcast-copy p {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 900;
+  font-size: 11px;
+  color: var(--ink);
+  letter-spacing: 0.06em;
+  margin: 0;
+  text-transform: uppercase;
+}
+.broadcast-copy p::before {
+  content: 'シンガポール ';
+  color: var(--bolt-strong);
+}
+.broadcast-copy h1 {
+  margin: 0;
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: clamp(28px, 4vw, 46px);
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.broadcast-copy h1 br { display: block; }
+.hero-line { display: none; }
+.broadcast-copy > span {
+  font-family: 'Special Elite', monospace;
+  font-size: 12px;
+  color: var(--ink-dim);
+  margin-top: 4px;
+  max-width: 460px;
+}
+
+/* score block */
+.hero-score {
+  position: relative;
+  background: var(--bolt);
+  border-left: var(--border);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  color: var(--ink);
+}
+.hero-score::before {
+  content: '\30d7 \30ec \30a4 \30e4 \30fc';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 900;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  opacity: 0.65;
+}
+.hero-score::after { display: none; }
+.hero-score span:first-child {
+  font-family: 'Bungee', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+.hero-score strong {
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: 66px;
+  line-height: 0.85;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  margin: 2px 0 0;
+  display: block;
+}
+.hero-score small {
+  font-family: 'Special Elite', monospace;
+  font-size: 10px;
+  color: var(--ink);
+  opacity: 0.75;
+  margin-top: 4px;
+}
+
+/* ── Signal strip (three side panels) ──────────────── */
+
+.signal-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) auto;
+  gap: 10px;
+}
+
+.signal-strip > div {
+  position: relative;
+  background: var(--paper-2);
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  padding: 10px 14px 9px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 60px;
+}
+.signal-strip > div::before {
+  position: absolute;
+  top: -9px;
+  left: 10px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  padding: 0 6px;
+  font-family: 'Bungee', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+.signal-strip > div:nth-child(1)::before { content: 'NO. \00b0 01'; }
+.signal-strip > div:nth-child(2)::before { content: 'NO. \00b0 02'; }
+.signal-strip > div:nth-child(3)::before { content: 'NO. \00b0 03'; }
+
+.signal-strip > div > span {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+.signal-strip > div > strong {
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 0.9;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.signal-message strong {
+  font-family: 'Special Elite', monospace !important;
+  font-size: 14px !important;
+  color: var(--ink) !important;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+.signal-message strong.error { color: var(--blood) !important; }
+.signal-message .retry-inline {
+  margin-left: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  border: 2px solid var(--ink);
+  padding: 2px 8px;
+  font-family: 'Bungee', sans-serif;
+  font-size: 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.signal-message .retry-inline:hover { background: var(--bolt); border-color: var(--bolt); color: var(--ink); }
+
+#refreshBtn {
+  background: var(--bolt);
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  padding: 0 22px;
+  font-family: 'Bungee', sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  min-width: 130px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: transform 80ms, box-shadow 80ms;
+  position: relative;
+}
+#refreshBtn::before {
+  content: 'アクション';
+  position: absolute;
+  top: -9px;
+  left: 10px;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0 6px;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 900;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+#refreshBtn:hover { background: var(--bolt-strong); color: var(--paper); }
+#refreshBtn:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 0 var(--ink);
+}
+
+/* ── Rooms head ───────────────────────────────────── */
+
+.rooms-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 8px 4px 6px;
+  border-bottom: var(--border);
+  position: relative;
+  margin-top: 6px;
+}
+.rooms-head::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  border-bottom: var(--border-thin);
+}
+.rooms-head > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.rooms-head p {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 900;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--bolt-strong);
+  text-transform: uppercase;
+  margin: 0;
+}
+.rooms-head p::before {
+  content: 'サーバー \00b7 ';
+  color: var(--ink);
+}
+.rooms-head h2 {
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: 30px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  margin: 0;
+  line-height: 0.95;
+}
+
+.rooms-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.rooms-controls p {
+  font-family: 'Special Elite', monospace;
+  font-size: 12px;
+  color: var(--ink-dim);
+  margin: 0;
+}
+.rooms-controls p strong {
+  color: var(--ink);
+  font-weight: 400;
+  margin-left: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+.country-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Bungee', sans-serif;
+  font-size: 10px;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.country-filter select {
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  color: var(--ink);
+  font-family: 'Special Elite', monospace;
+  font-size: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+  box-shadow: var(--shadow-tight);
+}
+.country-filter select:focus {
+  outline: 2px solid var(--bolt);
+  outline-offset: 2px;
+}
+
+/* ── Server panels ────────────────────────────────── */
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 0;
+  counter-reset: server-num;
+}
+
+.country-heading {
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: 18px;
+  color: var(--ink);
+  text-transform: uppercase;
+  margin: 6px 0 -2px;
+  letter-spacing: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.country-heading::before {
+  content: '第一話';
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 900;
+  font-size: 11px;
+  color: var(--blood);
+  letter-spacing: 0.06em;
+}
+.country-heading::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  background: var(--ink);
+  align-self: center;
+  margin-left: 4px;
+}
+
+.card {
+  position: relative;
+  background: var(--paper);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: 90px 1fr 210px;
+  grid-template-rows: auto auto auto auto;
+  grid-template-areas:
+    'panel top top'
+    'panel title stats'
+    'panel roster acts'
+    'meta meta meta';
+  counter-increment: server-num;
+  transition: transform 160ms, box-shadow 160ms;
+}
+
+.grid.first-load .card {
+  animation: panelIn 300ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translate(-4px, 4px);
+    box-shadow: 0 0 0 0 var(--ink);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+    box-shadow: var(--shadow);
+  }
+}
+
+.card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-lift);
+}
+.card:hover .card::before { }
+
+/* left ink block with server number */
+.card::before {
+  content: 'NO.' counter(server-num, decimal-leading-zero);
+  grid-area: panel;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: 'Anton', sans-serif;
+  font-size: 26px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  border-right: var(--border);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255, 245, 220, 0.14) 1.2px, transparent 1.4px);
+  background-size: 5px 5px;
+  letter-spacing: 0;
+  line-height: 1;
+  writing-mode: horizontal-tb;
+  position: relative;
+}
+.card::after {
+  content: 'サーバー';
+  grid-area: panel;
+  align-self: end;
+  justify-self: start;
+  padding: 0 0 12px 10px;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 900;
+  font-size: 11px;
+  color: var(--bolt);
+  letter-spacing: 0.1em;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  height: fit-content;
+}
+
+.card-top {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px 6px;
+  border-bottom: 2px dashed var(--ink);
+}
+
+.top-badges { display: inline-flex; gap: 8px; align-items: center; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Bungee', sans-serif;
+  font-size: 9px;
+  padding: 2px 8px;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+}
+.pill.online {
+  background: var(--paper);
+}
+.pill.online::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--live);
+  border-radius: 50%;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.pill.offline {
+  background: var(--paper);
+  color: var(--blood);
+  border-color: var(--blood);
+}
+.pill.offline::before {
+  content: '\2715';
+  font-family: 'Anton', sans-serif;
+  font-size: 14px;
+  color: var(--blood);
+}
+.pill.version-current {
+  background: var(--paper-2);
+}
+.pill.version-outdated {
+  background: var(--warning);
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.pill.version-outdated::before {
+  content: '\26A0';
+  font-size: 12px;
+}
+
+.address {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-dim);
+  font-weight: 500;
+  padding: 2px 6px;
+  background: var(--paper-2);
+  border: 1px solid var(--ink);
+}
+
+.card h2 {
+  grid-area: title;
+  margin: 0;
+  padding: 8px 16px 2px;
+  font-family: 'Special Elite', monospace;
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+/* Stats column on the right */
+.stats {
+  grid-area: stats;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(3, auto);
+  padding: 6px 16px 10px;
+  border-left: 2px dashed var(--ink);
+  gap: 6px;
+}
+
+.stat-box {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--ink);
+}
+.stat-box:last-child { border-bottom: none; }
+.stat-box .label {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 900;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+.stat-box strong {
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  color: var(--ink);
+  line-height: 1;
+  letter-spacing: 0;
+}
+.stat-box .stat-subline {
+  grid-column: 2;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-mute);
+}
+.players-stat strong { color: var(--bolt-strong); }
+.players-stat .label::before { content: 'プレイヤー '; color: var(--bolt); }
+.map-stat .label::before { content: 'マップ '; color: var(--bolt); }
+.region-stat .label::before { content: 'リージョン '; color: var(--bolt); }
+
+.map-stat {
+  grid-template-columns: 72px 1fr auto;
+}
+.map-thumb {
+  width: 34px;
+  height: 22px;
+  background-size: cover;
+  background-position: center;
+  border: 2px solid var(--ink);
+  filter: grayscale(1) contrast(1.4);
+}
+.region-stat .flag-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.flag-icon {
+  width: 22px;
+  height: 16px;
+  border: 2px solid var(--ink);
+  object-fit: cover;
+  vertical-align: -3px;
+  background: var(--paper-2);
+}
+.country-flag {
+  width: 28px;
+  height: 20px;
+  border: 2px solid var(--ink);
+  object-fit: cover;
+  margin-right: 10px;
+  vertical-align: -4px;
+  background: var(--paper-2);
+  box-shadow: var(--shadow-tight);
+}
+.flag-blank {
+  display: inline-block;
+  width: 22px;
+  height: 16px;
+  border: 2px solid var(--ink);
+  background: var(--paper-2);
+  color: var(--ink-mute);
+  text-align: center;
+  font-size: 10px;
+  line-height: 12px;
+  vertical-align: -3px;
+}
+
+/* Actions column */
+.card-actions {
+  grid-area: acts;
+  padding: 6px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border-left: 2px dashed var(--ink);
+  border-top: 2px dashed var(--ink);
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.action-btn {
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: var(--shadow-tight);
+  color: var(--ink);
+  padding: 8px 12px;
+  font-family: 'Bungee', sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: transform 80ms, box-shadow 80ms, background 100ms;
+  min-height: 32px;
+}
+.action-btn:hover {
+  background: var(--paper-2);
+}
+.action-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 var(--ink);
+}
+.connect-btn {
+  background: var(--bolt);
+  color: var(--ink);
+  position: relative;
+  font-size: 13px;
+}
+.connect-btn:hover {
+  background: var(--bolt-strong);
+  color: var(--paper);
+}
+.connect-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.copy-btn.loading::after { content: '...'; }
+
+.source-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--ink-mute);
+  padding: 2px 6px;
+  border: 1px solid var(--ink);
+  align-self: flex-end;
+  background: var(--paper);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.source-badge.source-direct {
+  background: var(--bolt-paper);
+  color: var(--bolt-strong);
+}
+.source-badge.source-feed {
+  background: var(--warning);
+  color: var(--ink);
+}
+
+/* Roster (bottom left region) */
+.players-panel {
+  grid-area: roster;
+  padding: 10px 16px;
+  border-top: 2px dashed var(--ink);
+  background: var(--paper-2);
+}
+
+.players-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 0 5px;
+  margin-bottom: 5px;
+  border-bottom: 1px solid var(--ink);
+}
+.players-header .label {
+  font-family: 'Bungee', sans-serif;
+  font-size: 10px;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.players-header .label::before {
+  content: '\30ed\30b9\30bf\30fc \0007c ';
+  color: var(--bolt-strong);
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 900;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+.players-header strong {
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  color: var(--bolt-strong);
+}
+
+.player-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 14px;
+  counter-reset: roster-num;
+}
+.player-list li {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-family: 'Special Elite', monospace;
+  font-size: 12px;
+  border-bottom: 1px dotted var(--ink);
+  counter-increment: roster-num;
+}
+.player-list li:last-child { border-bottom: none; }
+.player-list li::before {
+  content: counter(roster-num, decimal-leading-zero);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-mute);
+}
+.player-name {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 8px;
+}
+.player-meta {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--ink-dim);
+  font-size: 10px;
+  background: var(--paper);
+  padding: 1px 5px;
+  border: 1px solid var(--ink);
+}
+
+.empty-players {
+  padding: 4px 0;
+  font-family: 'Special Elite', monospace;
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin: 0;
+  font-style: italic;
+}
+
+.tags,
+.version-note {
+  grid-area: meta;
+  margin: 0;
+  padding: 6px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-mute);
+  background: var(--ink);
+  color: var(--paper);
+  border-top: var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 0.02em;
+}
+.tags::before {
+  content: 'TAGS';
+  font-family: 'Bungee', sans-serif;
+  color: var(--bolt);
+  padding-right: 8px;
+  border-right: 1px solid var(--paper);
+  font-size: 9px;
+}
+.version-note {
+  border-top: 1px solid var(--paper);
+}
+.version-note::before {
+  content: 'VER';
+  font-family: 'Bungee', sans-serif;
+  color: var(--bolt);
+  padding-right: 8px;
+  border-right: 1px solid var(--paper);
+  font-size: 9px;
+}
+
+/* both tags + version share the same row via grid-area meta.
+   put version at the right side by wrapping with a flex row via container */
+.card .tags { grid-column: 1 / -1; }
+.card .version-note { grid-column: 1 / -1; }
+
+/* empty state */
+.empty-state {
+  padding: 40px 30px;
+  background: var(--paper-2);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.empty-state p {
+  font-family: 'Special Elite', monospace;
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin: 0 0 16px;
+}
+.empty-state p::before {
+  content: 'ERROR\A ';
+  white-space: pre;
+  font-family: 'Anton', sans-serif;
+  font-size: 28px;
+  color: var(--blood);
+  display: block;
+  letter-spacing: -0.01em;
+}
+.retry-btn {
+  background: var(--bolt);
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  padding: 10px 22px;
+  font-family: 'Bungee', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: transform 80ms, box-shadow 80ms;
+}
+.retry-btn:hover { background: var(--bolt-strong); color: var(--paper); }
+.retry-btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 0 var(--ink); }
+
+/* footer */
+.broadcast-footer {
+  margin-top: 20px;
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--ink);
+  color: var(--paper);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  font-family: 'Bungee', sans-serif;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.broadcast-footer span:first-child::before {
+  content: 'エンド \00b7 ';
+  color: var(--bolt);
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 900;
+}
+
+/* focus */
+button:focus-visible,
+a:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--bolt);
+  outline-offset: 2px;
+}
+
+/* ── Responsive ──────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .broadcast-hero {
+    grid-template-columns: 130px 1fr;
+    grid-template-rows: auto auto;
+  }
+  .hero-flag { grid-column: 1; grid-row: 1 / span 2; }
+  .broadcast-copy { grid-column: 2; grid-row: 1; }
+  .hero-score {
+    grid-column: 2;
+    grid-row: 2;
+    border-left: none;
+    border-top: var(--border);
+    padding: 12px 16px;
+  }
+  .hero-score strong { font-size: 50px; }
+  .signal-strip { grid-template-columns: 1fr 1fr; }
+  #refreshBtn { grid-column: 1 / -1; }
+  .signal-message { grid-column: 1 / -1; }
+  .card {
+    grid-template-columns: 74px 1fr;
+    grid-template-areas:
+      'panel top'
+      'panel title'
+      'stats stats'
+      'roster acts'
+      'meta meta';
+  }
+  .stats { border-left: none; border-top: 2px dashed var(--ink); padding: 10px 16px; }
+  .card-actions { border-top: 2px dashed var(--ink); }
+  .card::before { font-size: 22px; padding: 10px 8px; }
+  .card::after { padding: 0 0 10px 8px; }
+  .player-list { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  :root { --gutter: 10px; }
+  .broadcast-nav {
+    grid-template-columns: 1fr auto;
+    padding: 8px 12px;
+  }
+  .nav-links { display: none; }
+  .broadcast-brand { font-size: 18px; }
+  .broadcast-hero {
+    grid-template-columns: 1fr;
+  }
+  .hero-flag { grid-row: 1; grid-column: 1; border-right: none; border-bottom: var(--border); padding: 12px 14px; }
+  .hero-flag strong { font-size: 54px; }
+  .broadcast-copy { padding: 14px 14px; grid-row: 2; grid-column: 1; }
+  .hero-score { grid-row: 3; grid-column: 1; padding: 12px 14px; border-top: var(--border); border-left: none; }
+  .hero-score strong { font-size: 46px; }
+  .card {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'panel'
+      'top'
+      'title'
+      'stats'
+      'acts'
+      'roster'
+      'meta';
+  }
+  .card::before {
+    padding: 8px 14px;
+    font-size: 18px;
+    border-right: none;
+    border-bottom: var(--border);
+    justify-self: start;
+    width: 100%;
+    background-size: 5px 5px;
+  }
+  .card::after { display: none; }
+  .stats, .card-actions { border-left: none; }
+  .card-actions { border-top: 2px dashed var(--ink); }
+  .rooms-head h2 { font-size: 22px; }
+}
+
+@media (max-width: 440px) {
+  .signal-strip { grid-template-columns: 1fr; }
+  #refreshBtn { min-height: 48px; }
+  .broadcast-footer { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .rooms-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .rooms-controls { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .hero-flag strong { font-size: 44px; }
+  .broadcast-copy h1 { font-size: 28px; }
+  .hero-score strong { font-size: 38px; }
+}
+
+/* ── Reduced motion ─────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+  .pill.online::before,
+  .nav-status span { animation: none; }
+}

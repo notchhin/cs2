@@ -1,0 +1,521 @@
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const dgram = require('dgram');
+const { URL } = require('url');
+
+const PORT = process.env.PORT || 8787;
+const QUERY_TIMEOUT_MS = 4000;
+const VISITOR_TTL_MS = 45_000;
+const LIVE_REFRESH_MS = 8_000;
+const SSE_HEARTBEAT_MS = 20_000;
+const MAX_DIRECT_QUERIES = 24;
+
+const publicDir = path.join(__dirname, 'public');
+const activeVisitors = new Map();
+const liveClients = new Set();
+
+let cachedServers = null;
+let lastFetchError = null;
+let fetchInFlight = null;
+
+function sendJson(res, status, data) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff'
+  });
+  res.end(JSON.stringify(data));
+}
+
+function serveFile(res, filePath, contentType = 'text/html; charset=utf-8') {
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      sendJson(res, 404, { error: 'Not found' });
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin'
+    });
+    res.end(data);
+  });
+}
+
+function readNullTerminatedString(buffer, offset) {
+  const end = buffer.indexOf(0x00, offset);
+  if (end === -1) {
+    return { value: '', nextOffset: buffer.length };
+  }
+  return {
+    value: buffer.toString('utf8', offset, end),
+    nextOffset: end + 1
+  };
+}
+
+function parseAddress(address) {
+  const [host, portRaw] = address.split(':');
+  return {
+    host,
+    port: Number(portRaw)
+  };
+}
+
+function sendUdpMessage(host, port, message) {
+  return new Promise((resolve, reject) => {
+    const socket = dgram.createSocket('udp4');
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error('UDP query timed out'));
+    }, QUERY_TIMEOUT_MS);
+
+    socket.once('error', (error) => {
+      clearTimeout(timeout);
+      socket.close();
+      reject(error);
+    });
+
+    socket.once('message', (buffer) => {
+      clearTimeout(timeout);
+      socket.close();
+      resolve(buffer);
+    });
+
+    socket.send(message, port, host, (error) => {
+      if (error) {
+        clearTimeout(timeout);
+        socket.close();
+        reject(error);
+      }
+    });
+  });
+}
+
+function pruneVisitors() {
+  const now = Date.now();
+  for (const [visitorId, timestamp] of activeVisitors.entries()) {
+    if (now - timestamp > VISITOR_TTL_MS) {
+      activeVisitors.delete(visitorId);
+    }
+  }
+  return activeVisitors.size;
+}
+
+function touchVisitor(visitorId) {
+  if (!visitorId || typeof visitorId !== 'string') {
+    return pruneVisitors();
+  }
+  // Limit visitor ID length to prevent memory abuse
+  const safeId = visitorId.slice(0, 128);
+  if (safeId.length === 0) {
+    return pruneVisitors();
+  }
+  activeVisitors.set(safeId, Date.now());
+  return pruneVisitors();
+}
+
+async function queryA2SInfo(host, port, challenge = null) {
+  const basePayload = Buffer.concat([
+    Buffer.from([0xff, 0xff, 0xff, 0xff, 0x54]),
+    Buffer.from('Source Engine Query\0', 'ascii')
+  ]);
+  const payload = challenge === null
+    ? basePayload
+    : Buffer.concat([basePayload, challenge]);
+
+  const buffer = await sendUdpMessage(host, port, payload);
+  if (buffer.readInt32LE(0) !== -1) {
+    throw new Error('Unexpected A2S_INFO header');
+  }
+
+  if (buffer[4] === 0x41) {
+    const nextChallenge = buffer.subarray(5, 9);
+    return queryA2SInfo(host, port, nextChallenge);
+  }
+
+  if (buffer[4] !== 0x49) {
+    throw new Error('Unexpected A2S_INFO response');
+  }
+
+  let offset = 6;
+  const name = readNullTerminatedString(buffer, offset);
+  offset = name.nextOffset;
+  const map = readNullTerminatedString(buffer, offset);
+  offset = map.nextOffset;
+  const folder = readNullTerminatedString(buffer, offset);
+  offset = folder.nextOffset;
+  const game = readNullTerminatedString(buffer, offset);
+  offset = game.nextOffset;
+
+  const appId = buffer.readUInt16LE(offset);
+  offset += 2;
+  const players = buffer.readUInt8(offset++);
+  const maxPlayers = buffer.readUInt8(offset++);
+  const bots = buffer.readUInt8(offset++);
+  const serverType = String.fromCharCode(buffer.readUInt8(offset++));
+  const environment = String.fromCharCode(buffer.readUInt8(offset++));
+  const visibility = buffer.readUInt8(offset++);
+  const vac = buffer.readUInt8(offset++);
+  const version = readNullTerminatedString(buffer, offset);
+
+  return {
+    name: name.value,
+    map: map.value,
+    folder: folder.value,
+    game: game.value,
+    appId,
+    players,
+    maxPlayers,
+    bots,
+    serverType,
+    environment,
+    visibility,
+    vac,
+    version: version.value
+  };
+}
+
+async function queryA2SPlayers(host, port, challenge = -1) {
+  const payload = Buffer.alloc(9);
+  payload.writeInt32LE(-1, 0);
+  payload.writeUInt8(0x55, 4);
+  payload.writeInt32LE(challenge, 5);
+
+  const buffer = await sendUdpMessage(host, port, payload);
+  const header = buffer.readInt32LE(0);
+  const type = buffer.readUInt8(4);
+
+  if (header !== -1) {
+    throw new Error('Unexpected A2S_PLAYER header');
+  }
+
+  if (type === 0x41) {
+    const nextChallenge = buffer.readInt32LE(5);
+    return queryA2SPlayers(host, port, nextChallenge);
+  }
+
+  if (type !== 0x44) {
+    throw new Error('Unexpected A2S_PLAYER response');
+  }
+
+  let offset = 5;
+  const count = buffer.readUInt8(offset++);
+  const players = [];
+
+  for (let i = 0; i < count && offset < buffer.length; i += 1) {
+    offset += 1;
+    const name = readNullTerminatedString(buffer, offset);
+    offset = name.nextOffset;
+
+    if (offset + 8 > buffer.length) {
+      break;
+    }
+
+    const score = buffer.readInt32LE(offset);
+    offset += 4;
+    const durationSeconds = buffer.readFloatLE(offset);
+    offset += 4;
+
+    players.push({
+      name: name.value || '(unnamed player)',
+      score,
+      durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : 0
+    });
+  }
+
+  return players;
+}
+
+async function queryServerDirect(address) {
+  const { host, port } = parseAddress(address);
+
+  try {
+    const [info, players] = await Promise.all([
+      queryA2SInfo(host, port),
+      queryA2SPlayers(host, port).catch(() => [])
+    ]);
+
+    return {
+      ok: true,
+      source: 'direct-a2s',
+      info,
+      players
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      source: 'direct-a2s',
+      error: error.message,
+      players: []
+    };
+  }
+}
+
+function discoverAllCs2Servers(servers) {
+  return servers
+    .filter((server) => {
+      const tags = Array.isArray(server?.tags) ? server.tags.map((tag) => String(tag).toLowerCase()) : [];
+      const isCs2 = server?.version_type === 'cs2' || tags.includes('cs2');
+      return isCs2 && server?.address;
+    })
+    .sort((a, b) => {
+      const countryCompare = String(a?.country?.name || 'Other').localeCompare(String(b?.country?.name || 'Other'));
+      if (countryCompare !== 0) return countryCompare;
+      const aPlayers = Array.isArray(a.players) ? a.players[0] || 0 : 0;
+      const bPlayers = Array.isArray(b.players) ? b.players[0] || 0 : 0;
+      return bPlayers - aPlayers || String(a.address).localeCompare(String(b.address));
+    });
+}
+
+async function queryDirectServers(servers) {
+  const directByAddress = new Map();
+  const candidates = servers.filter((server) => server.online !== false).slice(0, MAX_DIRECT_QUERIES);
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < candidates.length) {
+      const server = candidates[cursor++];
+      directByAddress.set(server.address, await queryServerDirect(server.address));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(8, candidates.length) }, worker));
+  return directByAddress;
+}
+
+function detectLatestCs2Version(servers) {
+  const counts = new Map();
+
+  for (const server of servers) {
+    const versionType = server?.version_type;
+    const version = String(server?.version || '').trim();
+    if (versionType !== 'cs2' || !version) {
+      continue;
+    }
+    counts.set(version, (counts.get(version) || 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+}
+
+async function fetchServers() {
+  const response = await fetch('https://hvh.wtf/api/servers', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; HVH-SG-Tracker/1.0)'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Upstream returned ${response.status}`);
+  }
+
+  const servers = await response.json();
+  const latestCs2Version = detectLatestCs2Version(servers);
+  const trackedServers = discoverAllCs2Servers(servers);
+  const directByAddress = await queryDirectServers(trackedServers);
+
+  const filtered = trackedServers.map((server) => {
+    const address = server.address;
+    const direct = directByAddress.get(address) || { ok: false, error: 'No direct query scheduled', players: [] };
+
+    if (!server && !direct.ok) {
+      return {
+        address,
+        found: false,
+        online: false,
+        playersNow: null,
+        maxPlayers: null,
+        map: null,
+        name: 'Unknown server',
+        livePlayerNames: [],
+        liveDataSource: 'unavailable',
+        liveQueryOk: false,
+        liveQueryError: direct.error || 'No data available'
+      };
+    }
+
+    const [feedPlayersNow, feedMaxPlayers] = server && Array.isArray(server.players)
+      ? server.players
+      : [null, null];
+
+    const playersNow = direct.ok ? direct.info.players : feedPlayersNow;
+    const maxPlayers = direct.ok ? direct.info.maxPlayers : feedMaxPlayers;
+    const map = direct.ok ? direct.info.map : (server?.map || null);
+    const name = direct.ok ? direct.info.name : (server?.name || address);
+    const serverVersion = String(direct.ok ? direct.info.version : (server?.version || '')).trim() || null;
+    const isOutdated = Boolean(serverVersion && latestCs2Version && serverVersion !== latestCs2Version);
+
+    return {
+      address: server?.address || address,
+      found: Boolean(server || direct.ok),
+      online: direct.ok ? true : Boolean(server?.online),
+      playersNow,
+      maxPlayers,
+      map,
+      name,
+      country: server?.country?.name || null,
+      countryCode: server?.country?.code || null,
+      region: server?.region?.name || null,
+      tags: server?.tags || [],
+      provider: server?.provider || null,
+      serverVersion,
+      latestCs2Version,
+      isOutdated,
+      updatedAt: new Date().toISOString(),
+      livePlayerNames: direct.players,
+      liveDataSource: direct.ok ? 'direct-a2s' : 'hvh.wtf-feed',
+      liveQueryOk: direct.ok,
+      liveQueryError: direct.ok ? null : direct.error
+    };
+  });
+
+  return {
+    source: 'https://hvh.wtf/api/servers',
+    countries: [...new Set(filtered.map((server) => server.country || 'Other'))].sort(),
+    refreshedAt: new Date().toISOString(),
+    totalTracked: filtered.length,
+    activeVisitors: pruneVisitors(),
+    servers: filtered
+  };
+}
+
+function sendSse(res, event, data) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function broadcastServers(data) {
+  for (const client of liveClients) {
+    sendSse(client, 'servers', data);
+  }
+}
+
+function broadcastError(error) {
+  for (const client of liveClients) {
+    sendSse(client, 'upstream-error', {
+      message: error.message,
+      at: new Date().toISOString()
+    });
+  }
+}
+
+async function refreshServers(force = false) {
+  if (!force && fetchInFlight) {
+    return fetchInFlight;
+  }
+
+  fetchInFlight = (async () => {
+    try {
+      const data = await fetchServers();
+      cachedServers = data;
+      lastFetchError = null;
+      broadcastServers(data);
+      return data;
+    } catch (error) {
+      lastFetchError = error;
+      broadcastError(error);
+      throw error;
+    } finally {
+      fetchInFlight = null;
+    }
+  })();
+
+  return fetchInFlight;
+}
+
+setInterval(() => {
+  refreshServers().catch(() => {});
+}, LIVE_REFRESH_MS);
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  if (url.pathname === '/api/presence') {
+    const visitorId = url.searchParams.get('id');
+    const count = touchVisitor(visitorId);
+    if (cachedServers) {
+      cachedServers = {
+        ...cachedServers,
+        activeVisitors: count
+      };
+      broadcastServers(cachedServers);
+    }
+    sendJson(res, 200, { ok: true, activeVisitors: count });
+    return;
+  }
+
+  if (url.pathname === '/api/stream') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      Connection: 'keep-alive'
+    });
+    res.write(': connected\n\n');
+    liveClients.add(res);
+
+    if (cachedServers) {
+      sendSse(res, 'servers', cachedServers);
+    } else if (lastFetchError) {
+      sendSse(res, 'upstream-error', {
+        message: lastFetchError.message,
+        at: new Date().toISOString()
+      });
+    }
+
+    const heartbeat = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, SSE_HEARTBEAT_MS);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      liveClients.delete(res);
+      res.end();
+    });
+
+    refreshServers().catch(() => {});
+    return;
+  }
+
+  if (url.pathname === '/api/servers') {
+    try {
+      const data = cachedServers || await refreshServers(true);
+      sendJson(res, 200, data);
+    } catch (error) {
+      sendJson(res, 502, {
+        error: 'Failed to fetch upstream server list'
+      });
+    }
+    return;
+  }
+
+  if (url.pathname === '/' || url.pathname === '/index.html') {
+    serveFile(res, path.join(publicDir, 'index.html'));
+    return;
+  }
+
+  if (url.pathname === '/styles.css') {
+    serveFile(res, path.join(publicDir, 'styles.css'), 'text/css; charset=utf-8');
+    return;
+  }
+
+  if (url.pathname === '/favicon.svg' || url.pathname === '/jdm-bg.svg' || url.pathname === '/mirage-map.svg' || url.pathname === '/flag-sg.svg' || url.pathname === '/killua-inspired-bg.svg') {
+    serveFile(res, path.join(publicDir, path.basename(url.pathname)), 'image/svg+xml');
+    return;
+  }
+
+  if (url.pathname === '/mirage-map.jpg') {
+    serveFile(res, path.join(publicDir, 'mirage-map.jpg'), 'image/jpeg');
+    return;
+  }
+
+  sendJson(res, 404, { error: 'Not found' });
+});
+
+server.listen(PORT, () => {
+  console.log(`HVH SG tracker running on http://localhost:${PORT}`);
+  refreshServers(true).catch((error) => {
+    console.error('Initial live refresh failed:', error.message);
+  });
+});

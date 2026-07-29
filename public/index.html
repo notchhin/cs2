@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CS2 HVH — Singapore server tracker</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bungee&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+JP:wght@700;900&family=Special+Elite&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+  <a href="#serverGrid" class="skip-link">Skip to servers</a>
+  <div class="broadcast-shell">
+    <nav class="broadcast-nav" aria-label="Primary navigation">
+      <a class="broadcast-brand" href="/" aria-label="CS2 HVH home">CS2 <span>HVH</span></a>
+      <div class="nav-links"><a class="active" href="#serverGrid">Servers</a><a href="#status">Status</a><a href="#serverGrid">Singapore</a></div>
+      <div class="nav-status"><span></span>Live</div>
+    </nav>
+
+    <main class="broadcast-main">
+      <section class="broadcast-hero" aria-labelledby="broadcastTitle">
+        <div class="hero-flag"><span>HVH</span><strong>HVH</strong></div>
+        <div class="broadcast-copy"><p>The Global Board</p><h1 id="broadcastTitle">Every HvH server,<br>every region.</h1><span>Live rosters, live maps, one click to Steam. Refreshed every eight seconds.</span></div>
+        <div class="hero-score"><span>Players online</span><strong id="playersOnline">0</strong><small>Across tracked servers</small></div>
+      </section>
+
+      <section class="signal-strip" aria-label="Live telemetry">
+        <div><span>Servers tracked</span><strong id="trackedCount">0</strong></div>
+        <div><span>Watching now</span><strong id="visitorCount">0</strong></div>
+        <div class="signal-message"><span>Status</span><strong id="status" role="status" aria-live="polite">Loading...</strong></div>
+        <button id="refreshBtn" aria-label="Refresh live server data">Refresh</button>
+      </section>
+
+      <section class="rooms-head"><div><p>Now on the board</p><h2>Server list</h2></div><div class="rooms-controls"><label class="country-filter" for="countryFilter">Region <select id="countryFilter" aria-label="Filter servers by country"><option value="__all__">All regions</option></select></label><p>Updated <strong id="refreshedAt">-</strong></p></div></section>
+      <section id="serverGrid" class="grid" aria-label="Server list"></section>
+    </main>
+    <footer class="broadcast-footer"><span>SG HvH community tracker</span><span>Direct Steam connect enabled</span></footer>
+  </div>
+  <script>
+      const refreshBtn = document.getElementById('refreshBtn');
+      const statusEl = document.getElementById('status');
+      const gridEl = document.getElementById('serverGrid');
+      const refreshedAtEl = document.getElementById('refreshedAt');
+      const playersOnlineEl = document.getElementById('playersOnline');
+      const trackedCountEl = document.getElementById('trackedCount');
+      const visitorCountEl = document.getElementById('visitorCount');
+      const countryFilter = document.getElementById('countryFilter');
+      let selectedCountry = '__all__';
+      let latestServerData = null;
+      let hasRenderedOnce = false;
+      let lastFingerprint = '';
+
+      const mapArt = {
+        de_mirage: '/mirage-map.jpg'
+      };
+
+      function flagUrl(code) {
+        if (!code || code.length !== 2) return '';
+        return `https://flagcdn.com/w40/${code.toLowerCase()}.png`;
+      }
+      function flagImg(code, cls) {
+        const url = flagUrl(code);
+        if (!url) return `<span class="${cls} flag-blank" aria-hidden="true">◐</span>`;
+        return `<img class="${cls}" src="${url}" alt="${escapeHtml(code)}" loading="lazy" width="24" height="18" />`;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+      }
+
+      function setText(el, value) {
+        if (el.textContent !== value) el.textContent = value;
+      }
+
+      const visitorId = (() => {
+        const existing = localStorage.getItem('hvh-visitor-id');
+        if (existing) return existing;
+        const created = `visitor-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+        localStorage.setItem('hvh-visitor-id', created);
+        return created;
+      })();
+
+      async function sendPresence() {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          const response = await fetch(`/api/presence?id=${encodeURIComponent(visitorId)}`, { cache: 'no-store', signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (!response.ok) return;
+          const data = await response.json();
+          if (typeof data.activeVisitors === 'number') {
+            setText(visitorCountEl, String(data.activeVisitors));
+          }
+        } catch (error) {
+          console.error(error);
+        }
+      }
+
+      async function loadServers() {
+        setText(statusEl, 'Refreshing...');
+        statusEl.classList.remove('error');
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          const response = await fetch('/api/servers', { cache: 'no-store', signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (!response.ok) throw new Error(`Server returned ${response.status}`);
+          const data = await response.json();
+          render(data);
+          setText(statusEl, 'Live');
+        } catch (error) {
+          const message = error.name === 'AbortError' ? 'Request timed out' : 'Cannot reach server';
+          statusEl.innerHTML = `${escapeHtml(message)}. <button onclick="loadServers()" class="retry-inline" aria-label="Retry loading servers">Retry</button>`;
+          statusEl.classList.add('error');
+          console.error(error);
+        }
+      }
+
+      let liveStream;
+      let reconnectTimer;
+
+      function connectLiveStream() {
+        if (liveStream) {
+          liveStream.close();
+        }
+
+        setText(statusEl, 'Connecting...');
+        statusEl.classList.remove('error');
+        liveStream = new EventSource('/api/stream');
+
+        liveStream.addEventListener('open', () => {
+          setText(statusEl, 'Live');
+        });
+
+        liveStream.addEventListener('servers', (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            render(data);
+            setText(statusEl, 'Live');
+          } catch (error) {
+            console.error(error);
+          }
+        });
+
+        liveStream.addEventListener('upstream-error', (event) => {
+          try {
+            const detail = JSON.parse(event.data);
+            statusEl.innerHTML = `Feed error: ${escapeHtml(detail.message)} <button onclick="loadServers()" class="retry-inline" aria-label="Refresh server data">Retry</button>`;
+            statusEl.classList.add('error');
+          } catch (error) {
+            console.error(error);
+          }
+        });
+
+        liveStream.addEventListener('error', () => {
+          setText(statusEl, 'Reconnecting...');
+          statusEl.classList.add('error');
+          liveStream.close();
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connectLiveStream, 2000);
+        });
+      }
+
+      function formatPlayTime(totalSeconds) {
+        const safeSeconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+        if (safeSeconds < 60) return `${safeSeconds}s`;
+        const minutes = Math.floor(safeSeconds / 60);
+        if (minutes < 60) return `${minutes}m`;
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+      }
+
+      function fingerprintServers(servers) {
+        return servers.map((s) => {
+          const players = (s.livePlayerNames || []).map((p) => `${p.name}|${Math.floor((p.durationSeconds || 0) / 30)}`).join(',');
+          return `${s.address}|${s.online ? 1 : 0}|${s.isOutdated ? 1 : 0}|${s.playersNow || 0}|${s.maxPlayers || 0}|${s.map || ''}|${s.liveQueryOk ? 1 : 0}|${players}`;
+        }).join('§');
+      }
+
+      function render(data) {
+        latestServerData = data;
+        const countries = data.countries || [...new Set(data.servers.map((server) => server.country || 'Other'))].sort();
+        const countryToCode = {};
+        data.servers.forEach((s) => { if (s.country && s.countryCode) countryToCode[s.country] = s.countryCode; });
+        if (countryFilter.options.length !== countries.length + 1) {
+          countryFilter.innerHTML = `<option value="__all__">◐  All regions</option>${countries.map((country) => {
+            const code = countryToCode[country];
+            const prefix = code ? `[${code}]  ` : '';
+            return `<option value="${escapeHtml(country)}">${prefix}${escapeHtml(country)}</option>`;
+          }).join('')}`;
+        }
+        if (![...countryFilter.options].some((option) => option.value === selectedCountry)) {
+          selectedCountry = '__all__';
+        }
+        countryFilter.value = selectedCountry;
+        const visibleServers = selectedCountry === '__all__' ? data.servers : data.servers.filter((server) => (server.country || 'Other') === selectedCountry);
+
+        setText(refreshedAtEl, new Date(data.refreshedAt).toLocaleTimeString());
+        setText(trackedCountEl, String(visibleServers.length));
+
+        const totalPlayers = visibleServers.reduce((sum, server) => sum + (server.playersNow || 0), 0);
+        setText(playersOnlineEl, String(totalPlayers));
+
+        if (typeof data.activeVisitors === 'number') {
+          setText(visitorCountEl, String(data.activeVisitors));
+        }
+
+        const fingerprint = fingerprintServers(visibleServers);
+        if (fingerprint === lastFingerprint && hasRenderedOnce) return;
+        lastFingerprint = fingerprint;
+
+        if (!visibleServers || visibleServers.length === 0) {
+          gridEl.classList.remove('first-load');
+          gridEl.innerHTML = '<div class="empty-state"><p>No CS2 HvH servers found right now. The upstream source may be temporarily unavailable.</p><button onclick="loadServers()" class="retry-btn" aria-label="Retry loading servers">Try again</button></div>';
+          return;
+        }
+
+        if (!hasRenderedOnce) {
+          gridEl.classList.add('first-load');
+        } else {
+          gridEl.classList.remove('first-load');
+        }
+
+        gridEl.innerHTML = '';
+        let currentCountry = null;
+        visibleServers.forEach((server, index) => {
+          const countryName = server.country || 'Other';
+          if (countryName !== currentCountry) {
+            currentCountry = countryName;
+            const heading = document.createElement('h3');
+            heading.className = 'country-heading';
+            heading.innerHTML = `${flagImg(server.countryCode, 'country-flag')}${escapeHtml(countryName)}`;
+            gridEl.appendChild(heading);
+          }
+          const card = document.createElement('article');
+          card.className = 'card';
+          if (!hasRenderedOnce) {
+            card.style.animationDelay = `${Math.min(index * 60, 300)}ms`;
+          }
+          const playersNow = Number.isFinite(server.playersNow) ? server.playersNow : 0;
+          const maxPlayers = Number.isFinite(server.maxPlayers) ? server.maxPlayers : null;
+          const occupancyPrimary = maxPlayers === null ? `${playersNow}` : `${playersNow} / ${maxPlayers}`;
+          const occupancySecondary = maxPlayers === null ? 'Slots unknown' : `${maxPlayers} slots`;
+          const onlineClass = server.online ? 'online' : 'offline';
+          const sourceClass = server.liveQueryOk ? 'source-direct' : 'source-feed';
+          const versionClass = server.isOutdated ? 'version-outdated' : 'version-current';
+          const versionLabel = server.isOutdated ? 'Outdated' : 'Current';
+          const mapName = server.map || 'Unknown';
+          const mapImage = mapArt[mapName] || mapArt.de_mirage;
+          const playerList = (server.livePlayerNames || []).length
+            ? `<ul class="player-list">${server.livePlayerNames.map((player) => `
+                <li>
+                  <span class="player-name">${escapeHtml(player.name || '(unnamed)')}</span>
+                  <span class="player-meta">${formatPlayTime(player.durationSeconds)}</span>
+                </li>
+              `).join('')}</ul>`
+            : `<p class="empty-players">${server.liveQueryOk ? '— roster empty —' : '— roster unavailable —'}</p>`;
+
+          card.innerHTML = `
+            <div class="card-top">
+              <div class="top-badges">
+                <span class="pill ${onlineClass}">${server.online ? 'Online' : 'Offline'}</span>
+                <span class="pill ${versionClass}">${versionLabel}</span>
+              </div>
+              <span class="address">${escapeHtml(server.address)}</span>
+            </div>
+            <h2>${escapeHtml(server.name)}</h2>
+            <div class="stats">
+              <div class="stat-box compact-stat players-stat">
+                <span class="label">Players</span>
+                <strong>${occupancyPrimary}</strong>
+                <span class="stat-subline">${occupancySecondary}</span>
+              </div>
+              <div class="stat-box map-stat">
+                <span class="label">Map</span>
+                <strong>${escapeHtml(mapName)}</strong>
+                <div class="map-thumb" style="background-image:url('${mapImage}')"></div>
+              </div>
+              <div class="stat-box compact-stat region-stat">
+                <span class="label">Region</span>
+                <strong class="flag-row">${flagImg(server.countryCode, 'flag-icon')}${escapeHtml(server.country || 'Unknown')}</strong>
+              </div>
+            </div>
+            <div class="card-actions">
+              <div class="button-row action-bar">
+                <button class="connect-btn action-btn" data-address="${escapeHtml(server.address)}">Connect</button>
+                <button class="copy-btn action-btn" data-address="${escapeHtml(server.address)}">Copy IP</button>
+              </div>
+              <span class="source-badge ${sourceClass}">${server.liveQueryOk ? 'Direct query' : 'Feed fallback'}</span>
+            </div>
+            <div class="players-panel">
+              <div class="players-header">
+                <span class="label">Live roster</span>
+                <strong>${server.livePlayerNames?.length || 0}</strong>
+              </div>
+              ${playerList}
+            </div>
+            <p class="tags">${(server.tags || []).map(escapeHtml).join(' · ') || 'No tags'}</p>
+            <p class="version-note">${escapeHtml(server.serverVersion || 'unknown')}${server.latestCs2Version ? ` · latest ${escapeHtml(server.latestCs2Version)}` : ''}</p>
+          `;
+
+          const connectBtn = card.querySelector('.connect-btn');
+          connectBtn.addEventListener('click', () => {
+            if (connectBtn.disabled) return;
+            connectBtn.disabled = true;
+            connectBtn.textContent = 'Connecting...';
+            window.location.href = `steam://connect/${server.address}`;
+            setTimeout(() => {
+              connectBtn.disabled = false;
+              connectBtn.textContent = 'Connect';
+            }, 3000);
+          });
+
+          const copyBtn = card.querySelector('.copy-btn');
+          copyBtn.addEventListener('click', async () => {
+            copyBtn.classList.add('loading');
+            copyBtn.textContent = '';
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(server.address);
+              } else {
+                const textarea = document.createElement('textarea');
+                textarea.value = server.address;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+              }
+              copyBtn.classList.remove('loading');
+              copyBtn.textContent = 'Copied';
+              setTimeout(() => {
+                copyBtn.textContent = 'Copy IP';
+              }, 1200);
+            } catch (error) {
+              copyBtn.classList.remove('loading');
+              copyBtn.textContent = 'Copy failed';
+              setTimeout(() => {
+                copyBtn.textContent = 'Copy IP';
+              }, 1200);
+            }
+          });
+
+          gridEl.appendChild(card);
+        });
+
+        hasRenderedOnce = true;
+      }
+
+      countryFilter.addEventListener('change', () => {
+        selectedCountry = countryFilter.value;
+        if (latestServerData) {
+          lastFingerprint = '';
+          render(latestServerData);
+        }
+      });
+
+      refreshBtn.addEventListener('click', () => {
+        loadServers();
+      });
+
+      sendPresence();
+      loadServers();
+      connectLiveStream();
+      setInterval(sendPresence, 15000);
+    </script>
+  </body>
+</html>
