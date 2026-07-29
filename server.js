@@ -5,11 +5,13 @@ const dgram = require('dgram');
 const { URL } = require('url');
 
 const PORT = process.env.PORT || 8787;
-const QUERY_TIMEOUT_MS = 4000;
+const QUERY_TIMEOUT_MS = 2500;
+const DIRECT_QUERY_BUDGET_MS = 6000;
 const VISITOR_TTL_MS = 45_000;
 const LIVE_REFRESH_MS = 8_000;
 const SSE_HEARTBEAT_MS = 20_000;
 const MAX_DIRECT_QUERIES = 24;
+const DIRECT_QUERY_CONCURRENCY = 12;
 
 const publicDir = path.join(__dirname, 'public');
 const activeVisitors = new Map();
@@ -272,14 +274,26 @@ function discoverAllCs2Servers(servers) {
 async function queryDirectServers(servers) {
   const directByAddress = new Map();
   const candidates = servers.filter((server) => server.online !== false).slice(0, MAX_DIRECT_QUERIES);
+  if (candidates.length === 0) return directByAddress;
+
   let cursor = 0;
+  let aborted = false;
+  const deadline = setTimeout(() => { aborted = true; }, DIRECT_QUERY_BUDGET_MS);
+
   const worker = async () => {
-    while (cursor < candidates.length) {
+    while (cursor < candidates.length && !aborted) {
       const server = candidates[cursor++];
-      directByAddress.set(server.address, await queryServerDirect(server.address));
+      try {
+        const result = await queryServerDirect(server.address);
+        directByAddress.set(server.address, result);
+      } catch (error) {
+        directByAddress.set(server.address, { ok: false, error: error.message, players: [] });
+      }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(8, candidates.length) }, worker));
+
+  await Promise.all(Array.from({ length: Math.min(DIRECT_QUERY_CONCURRENCY, candidates.length) }, worker));
+  clearTimeout(deadline);
   return directByAddress;
 }
 
@@ -300,11 +314,19 @@ function detectLatestCs2Version(servers) {
 }
 
 async function fetchServers() {
-  const response = await fetch('https://hvh.wtf/api/servers', {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; HVH-SG-Tracker/1.0)'
-    }
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  let response;
+  try {
+    response = await fetch('https://hvh.wtf/api/servers', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; HVH-SG-Tracker/1.0)'
+      },
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     throw new Error(`Upstream returned ${response.status}`);
@@ -479,12 +501,18 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/servers') {
+    if (cachedServers) {
+      sendJson(res, 200, cachedServers);
+      refreshServers().catch(() => {});
+      return;
+    }
     try {
-      const data = cachedServers || await refreshServers(true);
+      const data = await refreshServers(true);
       sendJson(res, 200, data);
     } catch (error) {
       sendJson(res, 502, {
-        error: 'Failed to fetch upstream server list'
+        error: 'Failed to fetch upstream server list',
+        message: error.message
       });
     }
     return;
